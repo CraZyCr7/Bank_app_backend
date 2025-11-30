@@ -66,6 +66,17 @@ public class CardController {
         return ResponseEntity.ok(resp);
     }
 
+    @PostMapping("/spend")
+    public ResponseEntity<?> debitCardSpend(
+            @Valid @RequestBody DebitCardSpendRequest req,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
+        var resp = cardService.debitCardSpend(req, username);
+        return ResponseEntity.ok(resp);
+    }
+
+
     @GetMapping("/my")
     public ResponseEntity<List<CardResponse>> listMy(Authentication auth) {
         var list = cardService.listMyCards(auth.getName());

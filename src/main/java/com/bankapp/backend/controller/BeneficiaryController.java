@@ -28,7 +28,7 @@ public class BeneficiaryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(resp);
     }
 
-    @GetMapping
+    @GetMapping("/my")
     public List<BeneficiaryResponse> listMy(Authentication authentication) {
         String username = authentication.getName();
         return beneficiaryService.listMyBeneficiaries(username);

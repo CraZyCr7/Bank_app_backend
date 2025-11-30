@@ -1,9 +1,13 @@
 package com.bankapp.backend.service;
 
 import com.bankapp.backend.dto.AccountResponse;
+import com.bankapp.backend.dto.DepositRequest;
+import com.bankapp.backend.dto.DepositResponse;
 import com.bankapp.backend.dto.OpenAccountRequest;
 import com.bankapp.backend.entity.*;
 import com.bankapp.backend.repository.AccountRepository;
+import com.bankapp.backend.repository.FailedTransactionRepository;
+import com.bankapp.backend.repository.TransactionRecordRepository;
 import com.bankapp.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -11,8 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +26,9 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+
+    private final TransactionRecordRepository txRepo;
+    private final FailedTransactionRepository failedRepo;
 
     @Transactional
     public AccountResponse openAccount(OpenAccountRequest request, String username) {
@@ -84,6 +93,78 @@ public class AccountService {
         };
         String datePart = java.time.LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);// e.g. 20251129
         return "%s-%s-%06d".formatted(prefix, datePart, id);
+    }
+
+    @Transactional
+    public DepositResponse depositToAccount(DepositRequest req, String username) {
+        var user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (req.getAmount() == null || req.getAmount().doubleValue() <= 0) {
+            throw new RuntimeException("Invalid deposit amount");
+        }
+
+        // Lock the account row to avoid races
+        var toAccountOpt = accountRepository.findByIdForUpdate(req.getToAccountId());
+        var toAccount = toAccountOpt.orElseThrow(() -> new RuntimeException("Destination account not found"));
+
+        // Ensure the account belongs to the authenticated user
+        if (!toAccount.getOwner().getId().equals(user.getId())) {
+            throw new RuntimeException("Unauthorized: you can only deposit to your own accounts");
+        }
+
+        // Generate reference
+        String reference = generateReference("DEPOSIT");
+
+        // Create transaction record (PENDING)
+        TransactionRecord tx = TransactionRecord.builder()
+                .reference(reference)
+                .type(TransactionType.DEPOSIT) // or create new type DEPOSIT; see note below
+                .status(TransactionStatus.PENDING)
+                .toAccount(toAccount)
+                .amount(req.getAmount())
+                .narration(req.getNarration() != null ? req.getNarration() : ("Deposit: " + (req.getSource() == null ? "CASH" : req.getSource())))
+                .beneficiaryName(req.getSource())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        tx = txRepo.save(tx);
+
+        try {
+            // Credit the account
+            toAccount.setBalance(toAccount.getBalance().add(req.getAmount()));
+            accountRepository.save(toAccount);
+
+            // mark tx success
+            tx.setStatus(TransactionStatus.SUCCESS);
+            tx.setProcessedAt(LocalDateTime.now());
+            txRepo.save(tx);
+
+            return DepositResponse.builder()
+                    .reference(reference)
+                    .status(tx.getStatus().name())
+                    .toAccountId(toAccount.getId())
+                    .amount(req.getAmount())
+                    .newBalance(toAccount.getBalance())
+                    .processedAt(tx.getProcessedAt())
+                    .narration(tx.getNarration())
+                    .build();
+
+        } catch (Exception ex) {
+            tx.setStatus(TransactionStatus.FAILED);
+            txRepo.save(tx);
+            failedRepo.save(FailedTransaction.builder()
+                    .reference(reference)
+                    .reason("Deposit failed: " + ex.getMessage())
+                    .build());
+            throw ex;
+        }
+    }
+
+    private String generateReference(String prefix) {
+        String shortId = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String date = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        return prefix + "-" + date + "-" + shortId;
     }
 
     private AccountResponse toResponse(Account account) {

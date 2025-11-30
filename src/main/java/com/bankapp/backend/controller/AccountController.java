@@ -1,6 +1,8 @@
 package com.bankapp.backend.controller;
 
 import com.bankapp.backend.dto.AccountResponse;
+import com.bankapp.backend.dto.DepositRequest;
+import com.bankapp.backend.dto.DepositResponse;
 import com.bankapp.backend.dto.OpenAccountRequest;
 import com.bankapp.backend.service.AccountService;
 import jakarta.validation.Valid;
@@ -27,6 +29,16 @@ public class AccountController {
         String username = authentication.getName();
         var response = accountService.openAccount(request, username);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/deposit")
+    public ResponseEntity<DepositResponse> depositToAccount(
+            @Valid @RequestBody DepositRequest request,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
+        DepositResponse resp = accountService.depositToAccount(request, username);
+        return ResponseEntity.ok(resp);
     }
 
     // GET /api/accounts/my

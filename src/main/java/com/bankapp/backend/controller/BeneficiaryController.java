@@ -52,6 +52,7 @@ public class BeneficiaryController {
         String username = authentication.getName();
         beneficiaryService.deleteBeneficiary(id, username);
         return ResponseEntity.noContent().build();
+
     }
 
     // verify if an accountNumber belongs to an internal user

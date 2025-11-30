@@ -2,7 +2,6 @@ package com.bankapp.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.Length;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,6 +14,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class TransactionRecord {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -35,9 +35,9 @@ public class TransactionRecord {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "to_account_id")
-    private Account toAccount;
+    private Account toAccount; // nullable for external beneficiary if you don't have account in system
 
-    //Beneficiary details (snapshot)
+    // Beneficiary details (snapshot)
     @Column(length = 120)
     private String beneficiaryName;
 

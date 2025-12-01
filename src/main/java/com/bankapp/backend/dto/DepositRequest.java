@@ -19,7 +19,7 @@ public class DepositRequest {
     /**
      * optional source description: "CASH", "CHEQUE", "UPI", "NEFT from X", etc.
      */
-    //private String source;
+    private String source;
 
     private String narration;
 

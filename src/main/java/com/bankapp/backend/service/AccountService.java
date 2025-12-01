@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -104,9 +103,17 @@ public class AccountService {
             throw new RuntimeException("Invalid deposit amount");
         }
 
-        // Lock the account row to avoid races
-        var toAccountOpt = accountRepository.findByIdForUpdate(req.getToAccountId());
-        var toAccount = toAccountOpt.orElseThrow(() -> new RuntimeException("Destination account not found"));
+        // Resolve & lock the account row to avoid races.
+        // Prefer account number if provided; otherwise use id.
+        Account toAccount;
+        if (req.getToAccountNumber() != null && !req.getToAccountNumber().isBlank()) {
+            // requires AccountRepository.findByAccountNumberForUpdate(...)
+            var toAccountOpt = accountRepository.findByAccountNumberForUpdate(req.getToAccountNumber());
+            toAccount = toAccountOpt.orElseThrow(() -> new RuntimeException("Destination account not found by account number"));
+        } else {
+            var toAccountOpt = accountRepository.findByIdForUpdate(req.getToAccountId());
+            toAccount = toAccountOpt.orElseThrow(() -> new RuntimeException("Destination account not found"));
+        }
 
         // Ensure the account belongs to the authenticated user
         if (!toAccount.getOwner().getId().equals(user.getId())) {
@@ -132,7 +139,8 @@ public class AccountService {
 
         try {
             // Credit the account
-            toAccount.setBalance(toAccount.getBalance().add(req.getAmount()));
+            BigDecimal before = toAccount.getBalance() == null ? BigDecimal.ZERO : toAccount.getBalance();
+            toAccount.setBalance(before.add(req.getAmount()));
             accountRepository.save(toAccount);
 
             // mark tx success

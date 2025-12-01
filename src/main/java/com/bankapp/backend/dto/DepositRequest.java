@@ -8,8 +8,9 @@ import java.math.BigDecimal;
 
 @Data
 public class DepositRequest {
-    @NotNull
+
     private Long toAccountId;
+    private String toAccountNumber;
 
     @NotNull
     @DecimalMin("0.01")
@@ -18,7 +19,8 @@ public class DepositRequest {
     /**
      * optional source description: "CASH", "CHEQUE", "UPI", "NEFT from X", etc.
      */
-    private String source;
+    //private String source;
 
     private String narration;
+
 }

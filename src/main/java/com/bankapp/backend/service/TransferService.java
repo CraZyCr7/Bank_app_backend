@@ -29,20 +29,39 @@ public class TransferService {
     /**
      * IMPS = immediate; do it atomically using DB lock
      */
+    // src/main/java/com/bankapp/backend/service/TransferService.java
     @Transactional
     public TransferResponse doImps(TransferRequest req, String username) {
         var user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // validate source account ownership
-        var fromAccount = accountRepository.findByIdForUpdate(req.getFromAccountId())
-                .orElseThrow(() -> new RuntimeException("Source account not found"));
+        // Resolve "from" account (prefer accountNumber, fallback to id)
+        Account fromAccount;
+        if (req.getFromAccountNumber() != null && !req.getFromAccountNumber().isBlank()) {
+            fromAccount = accountRepository.findByAccountNumberForUpdate(req.getFromAccountNumber())
+                    .orElseThrow(() -> new RuntimeException("Source account not found by accountNumber"));
+        } else if (req.getFromAccountId() != null) {
+            fromAccount = accountRepository.findByIdForUpdate(req.getFromAccountId())
+                    .orElseThrow(() -> new RuntimeException("Source account not found by id"));
+        } else {
+            throw new RuntimeException("Either fromAccountId or fromAccountNumber must be provided");
+        }
 
+        // Ownership check
         if (!fromAccount.getOwner().getId().equals(user.getId())) {
             throw new RuntimeException("Unauthorized: not owner of source account");
         }
 
-        // validate amount & limits
+        // Resolve "to" account (internal destination) — optional
+        Account toAccount = null;
+        if (req.getToAccountNumber() != null && !req.getToAccountNumber().isBlank()) {
+            // try find and lock destination account (internal transfer)
+            toAccount = accountRepository.findByAccountNumberForUpdate(req.getToAccountNumber()).orElse(null);
+        } else if (req.getToAccountId() != null) {
+            toAccount = accountRepository.findByIdForUpdate(req.getToAccountId()).orElse(null);
+        } // else external beneficiary (we will keep beneficiaryAccountNumber)
+
+        // Validate amount & limits (same as before)
         if (req.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new RuntimeException("Invalid amount");
         }
@@ -50,18 +69,8 @@ public class TransferService {
             throw new RuntimeException("Exceeds single transfer limit");
         }
 
-        // find destination account (if internal) and lock it too (order locks by id to avoid deadlock)
-        Account toAccount = null;
-        if (req.getToAccountId() != null) {
-            // lock the account row
-            toAccount = accountRepository.findByIdForUpdate(req.getToAccountId())
-                    .orElseThrow(() -> new RuntimeException("Destination account not found"));
-        }
-
-        // create reference
+        // Now perform debit/credit like before (same logic)
         String reference = generateReference(req.getType());
-
-        // Create transaction record (PENDING)
         TransactionRecord tx = TransactionRecord.builder()
                 .reference(reference)
                 .type(TransactionType.IMPS)
@@ -69,17 +78,15 @@ public class TransferService {
                 .fromAccount(fromAccount)
                 .toAccount(toAccount)
                 .beneficiaryName(req.getBeneficiaryName())
-                .beneficiaryAccountNumber(req.getBeneficiaryAccountNumber())
+                .beneficiaryAccountNumber(req.getToAccountNumber() != null ? req.getToAccountNumber() : req.getBeneficiaryAccountNumber())
                 .beneficiaryIfsc(req.getBeneficiaryIfsc())
                 .amount(req.getAmount())
                 .narration(req.getNarration())
                 .createdAt(LocalDateTime.now())
                 .build();
-
         tx = txRepo.save(tx);
 
         try {
-            // Ensure sufficient balance
             if (fromAccount.getBalance().compareTo(req.getAmount()) < 0) {
                 tx.setStatus(TransactionStatus.FAILED);
                 txRepo.save(tx);
@@ -94,12 +101,12 @@ public class TransferService {
             fromAccount.setBalance(fromAccount.getBalance().subtract(req.getAmount()));
             accountRepository.save(fromAccount);
 
-            // Credit (if internal)
+            // Credit if internal (toAccount != null)
             if (toAccount != null) {
                 toAccount.setBalance(toAccount.getBalance().add(req.getAmount()));
                 accountRepository.save(toAccount);
             } else {
-                // external beneficiary: integration with bank-switch would happen here
+                // external: integrate with switch/gateway
             }
 
             tx.setStatus(TransactionStatus.SUCCESS);
@@ -115,7 +122,6 @@ public class TransferService {
                     .build();
 
         } catch (Exception ex) {
-            // If exception occurs, transaction will be rolled back; we also log failure
             tx.setStatus(TransactionStatus.FAILED);
             txRepo.save(tx);
             failedRepo.save(FailedTransaction.builder()
@@ -125,6 +131,7 @@ public class TransferService {
             throw ex;
         }
     }
+
 
     /**
      * NEFT = create pending transaction (settlement later)

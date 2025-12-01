@@ -8,11 +8,14 @@ import java.math.BigDecimal;
 @Data
 public class TransferRequest {
 
-    @NotNull
+
     private Long fromAccountId;
 
     // toAccountId may be null for external transfers (we use beneficiaryAccountNumber/IFSC)
     private Long toAccountId;
+
+    private String fromAccountNumber;
+    private String toAccountNumber;
 
     private String beneficiaryAccountNumber;
     private String beneficiaryIfsc;

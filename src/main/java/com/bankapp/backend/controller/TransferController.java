@@ -18,13 +18,12 @@ public class TransferController {
     private final TransferService transferService;
 
     @PostMapping("/imps")
-    public ResponseEntity<TransferResponse> impsTransfer(
-            @Valid @RequestBody TransferRequest request,
-            Authentication authentication
-    ) {
-        var resp = transferService.doImps(request, authentication.getName());
-        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    public ResponseEntity<TransferResponse> imps(@RequestBody @Valid TransferRequest request, Authentication auth) {
+        String username = auth.getName();
+        var resp = transferService.doImps(request, username);
+        return ResponseEntity.ok(resp);
     }
+
 
     @PostMapping("/neft")
     public ResponseEntity<TransferResponse> neftTransfer(

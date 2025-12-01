@@ -12,10 +12,12 @@ com\bankapp\backend\entity\User$UserBuilder.class
 com\bankapp\backend\controller\PingController.class
 com\bankapp\backend\dto\BeneficiaryResponse.class
 com\bankapp\backend\security\JwtAuthenticationFilter.class
+com\bankapp\backend\config\WebConfig.class
 com\bankapp\backend\entity\TransactionStatus.class
 com\bankapp\backend\config\SecurityConfig.class
 com\bankapp\backend\dto\OpenAccountRequest.class
 com\bankapp\backend\security\JwtUtil.class
+com\bankapp\backend\config\WebConfig$1.class
 com\bankapp\backend\BackendApplication.class
 com\bankapp\backend\dto\AccountResponse.class
 com\bankapp\backend\entity\FailedTransaction$FailedTransactionBuilder.class
